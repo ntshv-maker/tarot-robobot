@@ -15,14 +15,17 @@ cd /app
 echo "==> Initializing database at ${DATABASE_URL}"
 python3 scripts/init_local_db.py
 
-echo "==> Starting Telegram bot"
-python3 -m src.main &
-BOT_PID=$!
+if [[ -n "${DASHBOARD_PASSWORD:-}" ]]; then
+  echo "==> Starting admin dashboard on ${DASHBOARD_HOST}:${DASHBOARD_PORT}"
+  python3 -m src.dashboard &
+  DASHBOARD_PID=$!
+  cleanup() {
+    kill "${DASHBOARD_PID}" 2>/dev/null || true
+  }
+  trap cleanup EXIT
+else
+  echo "==> DASHBOARD_PASSWORD not set — dashboard disabled"
+fi
 
-cleanup() {
-  kill "${BOT_PID}" 2>/dev/null || true
-}
-trap cleanup EXIT
-
-echo "==> Starting admin dashboard on ${DASHBOARD_HOST}:${DASHBOARD_PORT}"
-exec python3 -m src.dashboard
+echo "==> Starting Telegram bot (foreground)"
+exec python3 -m src.main
