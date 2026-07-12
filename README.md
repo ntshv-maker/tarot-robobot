@@ -64,6 +64,16 @@ git push amvera main:master
 
 Подробная инструкция: [docs/deploy-amvera.md](docs/deploy-amvera.md)
 
+## Деплой на VPS (Timeweb)
+
+Сервер: `5.129.213.49` — бот работает через Docker Compose.
+
+- **Бот:** @tarot_robobot (polling 24/7)
+- **Дэшборд:** http://5.129.213.49:8080
+- **Автодеплой:** cron каждые 5 мин → `git pull` + перезапуск при push в `main`
+
+Подробнее: [docs/deploy-vps.md](docs/deploy-vps.md)
+
 ## Тесты
 
 ```bash
