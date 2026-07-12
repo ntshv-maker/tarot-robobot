@@ -53,6 +53,17 @@ chmod +x scripts/run_dashboard.sh
 
 Подробнее: [docs/admin.md](docs/admin.md)
 
+## Деплой на Amvera
+
+```bash
+git remote add amvera https://git.amvera.ru/ntshvrabota/run-tarot-robobot
+git push amvera main:master
+```
+
+В интерфейсе Amvera задай переменные из [docs/deploy-amvera.md](docs/deploy-amvera.md) (`BOT_TOKEN`, `KIE_API_KEY`, `DASHBOARD_PASSWORD`, `ADMIN_IDS`).
+
+Подробная инструкция: [docs/deploy-amvera.md](docs/deploy-amvera.md)
+
 ## Тесты
 
 ```bash

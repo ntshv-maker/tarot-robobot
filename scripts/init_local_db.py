@@ -14,8 +14,9 @@ from src.db.models import Base
 async def main() -> None:
     settings = get_settings()
     db_path = settings.database_url.replace("sqlite+aiosqlite:///", "")
-    if db_path.startswith("./"):
-        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    parent = Path(db_path).parent
+    if str(parent) not in {".", ""}:
+        parent.mkdir(parents=True, exist_ok=True)
 
     engine = create_async_engine(settings.database_url)
     async with engine.begin() as conn:
