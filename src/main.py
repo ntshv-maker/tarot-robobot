@@ -12,6 +12,7 @@ from aiogram.fsm.storage.redis import RedisStorage
 from redis.asyncio import Redis
 
 from src.bot.helpers.telegram import answer_callback, reply_to_callback
+from src.bot.logging_bot import LoggingBot
 from src.bot.middlewares.chat_log import ChatLogMiddleware
 from src.bot.middlewares.db import ActivityMiddleware, DbSessionMiddleware
 from src.bot.middlewares.settings import SettingsMiddleware
