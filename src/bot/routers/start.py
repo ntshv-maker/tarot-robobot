@@ -10,6 +10,7 @@ from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.bot.keyboards import consent_keyboard, product_menu_keyboard
+from src.bot.onboarding_flow import continue_onboarding
 from src.bot.states import OnboardingStates
 from src.config import Settings
 from src.db.repositories import ReferralRepository, UserRepository
@@ -44,6 +45,14 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession, 
         )
         return
 
+    if user.consent_accepted_at:
+        await message.answer(
+            f"Продолжим, {user.first_name or 'друг'}! Осталось заполнить несколько данных.",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        await continue_onboarding(message, state, user)
+        return
+
     await message.answer(
         "🔮 Привет! Я – Лея, и вот что я умею:\n\n"
         "💞 Рассчитать совместимость\n"
@@ -70,10 +79,10 @@ async def consent_accept(callback: CallbackQuery, state: FSMContext, session: As
 
     users = UserRepository(session)
     user = await users.get_by_telegram_id(callback.from_user.id)
-    if user:
+    if not user:
+        return
+
+    if not user.consent_accepted_at:
         await users.update_profile(user, consent_accepted_at=datetime.now(timezone.utc), onboarding_step="name")
-    await callback.message.answer(
-        "Для точного прогноза мне нужны твои данные.\n\n📝 Как тебя зовут?",
-        reply_markup=ReplyKeyboardRemove(),
-    )
-    await state.set_state(OnboardingStates.name)
+
+    await continue_onboarding(callback.message, state, user)

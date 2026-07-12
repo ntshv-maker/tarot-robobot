@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from src.db.models import (
     ChatDirection,
     ChatMessage,
+    ContentVersion,
     GeneratedContent,
     ProductType,
     Purchase,
@@ -76,6 +77,7 @@ class UserRepository:
         birth_date: date | None = None,
         birth_time: time | None = None,
         birth_place: str | None = None,
+        partner_birth_date: date | None = None,
         zodiac_sign: str | None = None,
         life_path_number: int | None = None,
         consent_accepted_at: datetime | None = None,
@@ -92,6 +94,8 @@ class UserRepository:
             user.birth_time = birth_time
         if birth_place is not None:
             user.birth_place = birth_place
+        if partner_birth_date is not None:
+            user.partner_birth_date = partner_birth_date
         if zodiac_sign is not None:
             user.zodiac_sign = zodiac_sign
         if life_path_number is not None:
@@ -326,7 +330,7 @@ class ContentRepository:
         content = GeneratedContent(
             user_id=user_id,
             content_type=content_type,
-            version=version,
+            version=ContentVersion(version),
             text=text,
             input_payload=input_payload,
             telegram_message_id=telegram_message_id,
@@ -352,7 +356,7 @@ class ContentRepository:
             .where(
                 GeneratedContent.user_id == user_id,
                 GeneratedContent.content_type == content_type,
-                GeneratedContent.version == version,
+                GeneratedContent.version == ContentVersion(version),
                 GeneratedContent.created_at >= cutoff,
             )
             .order_by(GeneratedContent.created_at.desc())

@@ -59,6 +59,10 @@ class ContentVersion(str, enum.Enum):
     FULL = "full"
 
 
+def _enum_values(enum_cls: type[enum.Enum]) -> list[str]:
+    return [item.value for item in enum_cls]
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -71,6 +75,7 @@ class User(Base):
     birth_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     birth_time: Mapped[Optional[time]] = mapped_column(Time, nullable=True)
     birth_place: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    partner_birth_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
     zodiac_sign: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     life_path_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -107,7 +112,9 @@ class Subscription(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    product_type: Mapped[ProductType] = mapped_column(Enum(ProductType))
+    product_type: Mapped[ProductType] = mapped_column(
+        Enum(ProductType, values_callable=_enum_values),
+    )
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -121,9 +128,14 @@ class Purchase(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    product_type: Mapped[ProductType] = mapped_column(Enum(ProductType))
+    product_type: Mapped[ProductType] = mapped_column(
+        Enum(ProductType, values_callable=_enum_values),
+    )
     amount_rub: Mapped[int] = mapped_column(Integer)
-    status: Mapped[PurchaseStatus] = mapped_column(Enum(PurchaseStatus), default=PurchaseStatus.PENDING)
+    status: Mapped[PurchaseStatus] = mapped_column(
+        Enum(PurchaseStatus, values_callable=_enum_values),
+        default=PurchaseStatus.PENDING,
+    )
     is_full_version: Mapped[bool] = mapped_column(Boolean, default=True)
     partner_birth_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     question_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -141,8 +153,12 @@ class GeneratedContent(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    content_type: Mapped[ProductType] = mapped_column(Enum(ProductType))
-    version: Mapped[ContentVersion] = mapped_column(Enum(ContentVersion))
+    content_type: Mapped[ProductType] = mapped_column(
+        Enum(ProductType, values_callable=_enum_values),
+    )
+    version: Mapped[ContentVersion] = mapped_column(
+        Enum(ContentVersion, values_callable=_enum_values),
+    )
     input_payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     text: Mapped[str] = mapped_column(Text)
     telegram_message_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
@@ -191,7 +207,7 @@ class ChatMessage(Base):
     user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), index=True, nullable=True)
     telegram_id: Mapped[int] = mapped_column(BigInteger, index=True)
     direction: Mapped[ChatDirection] = mapped_column(
-        Enum(ChatDirection, values_callable=lambda enum: [item.value for item in enum]),
+        Enum(ChatDirection, values_callable=_enum_values),
     )
     message_type: Mapped[str] = mapped_column(String(32), default="text")
     text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

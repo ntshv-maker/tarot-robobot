@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import structlog
 from datetime import date
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +29,7 @@ from src.services.products import EntitlementService, ProductService
 from src.utils.telegram_format import sanitize_telegram_html, send_thinking_sticker
 
 router = Router()
+logger = structlog.get_logger()
 
 PRODUCT_MAP = {
     "love": ProductType.LOVE,
@@ -85,6 +88,16 @@ async def _require_profile(message: Message, session: AsyncSession):
 async def _send_product_pitch(message: Message, product: ProductType) -> None:
     desc = PRODUCT_DESCRIPTIONS.get(product, PRODUCT_LABELS[product])
     await message.answer(desc, reply_markup=mini_full_keyboard(product))
+
+
+def _resolve_partner_date(user, data: dict) -> date | None:
+    if data.get("partner_birth_date"):
+        return date.fromisoformat(data["partner_birth_date"])
+    return user.partner_birth_date if user else None
+
+
+async def _save_partner_date(session: AsyncSession, user, partner_date: date) -> None:
+    await UserRepository(session).update_profile(user, partner_birth_date=partner_date)
 
 
 async def _deliver_full(
@@ -180,50 +193,76 @@ async def generate_mini(
     session: AsyncSession,
     settings: Settings,
 ) -> None:
-    product = PRODUCT_MAP[callback.data.split(":")[2]]
+    try:
+        await callback.answer("⏳ Готовлю разбор...")
+    except TelegramBadRequest:
+        pass
+
+    try:
+        product = PRODUCT_MAP[callback.data.split(":")[2]]
+    except (IndexError, KeyError):
+        await callback.message.answer("Не удалось распознать продукт. Нажми /start и попробуй снова.")
+        return
+
     user = await UserRepository(session).get_by_telegram_id(callback.from_user.id)
-    if not user:
-        await callback.answer("Сначала /start")
+    if not user or not user.onboarding_complete:
+        await callback.message.answer("Сначала пройди регистрацию — нажми /start и заполни анкету.")
         return
 
     data = await state.get_data()
-    partner_date = date.fromisoformat(data["partner_birth_date"]) if data.get("partner_birth_date") else None
+
+    if product == ProductType.QUESTION and not data.get("question_text"):
+        await callback.message.answer("💬 Сначала напиши свой вопрос одним сообщением:")
+        await state.set_state(ProductStates.question_text)
+        await state.update_data(pending_product=product.value)
+        return
+
+    partner_date = _resolve_partner_date(user, data)
 
     if product == ProductType.LOVE and not partner_date:
         await callback.message.answer("📅 Введите дату рождения партнёра (ДД.ММ.ГГГГ):")
         await state.set_state(ProductStates.partner_birth_date)
         await state.update_data(pending_product=product.value)
-        await callback.answer()
         return
 
-    cached = await ContentRepository(session).get_recent(user.id, product, "mini")
-    if cached:
-        await callback.message.answer(cached.text, reply_markup=mini_full_keyboard(product))
-        await callback.message.answer("📦 КОМБО-ПАКЕТЫ:", reply_markup=packages_keyboard())
-        await callback.answer()
-        return
-
-    await send_thinking_sticker(callback.message, callback.bot, settings)
-    svc = ContentGenerationService(settings, session)
-    text = sanitize_telegram_html(
-        await svc.generate(
-            user,
-            product,
-            version="mini",
-            partner_birth_date=partner_date,
-            question_text=data.get("question_text"),
+    if product == ProductType.LOVE and partner_date and user.partner_birth_date == partner_date:
+        await callback.message.answer(
+            f"💞 Использую сохранённую дату партнёра: {partner_date.strftime('%d.%m.%Y')}"
         )
-    )
-    await ContentRepository(session).save(
-        user.id,
-        product,
-        "mini",
-        text,
-        {"partner": str(partner_date), "question": data.get("question_text")},
-    )
-    await callback.message.answer(text, reply_markup=mini_full_keyboard(product))
-    await callback.message.answer("📦 КОМБО-ПАКЕТЫ:", reply_markup=packages_keyboard())
-    await callback.answer()
+
+    try:
+        cached = await ContentRepository(session).get_recent(user.id, product, "mini")
+        if cached:
+            await callback.message.answer(cached.text, reply_markup=mini_full_keyboard(product))
+            await callback.message.answer("📦 КОМБО-ПАКЕТЫ:", reply_markup=packages_keyboard())
+            return
+
+        await send_thinking_sticker(callback.message, callback.bot, settings)
+        svc = ContentGenerationService(settings, session)
+        text = sanitize_telegram_html(
+            await svc.generate(
+                user,
+                product,
+                version="mini",
+                partner_birth_date=partner_date,
+                question_text=data.get("question_text"),
+            )
+        )
+        await ContentRepository(session).save(
+            user.id,
+            product,
+            "mini",
+            text,
+            {"partner": str(partner_date), "question": data.get("question_text")},
+        )
+        await callback.message.answer(text, reply_markup=mini_full_keyboard(product))
+        await callback.message.answer("📦 КОМБО-ПАКЕТЫ:", reply_markup=packages_keyboard())
+    except Exception as exc:
+        await session.rollback()
+        logger.exception("generate_mini_failed", error=str(exc), product=product.value, user_id=user.id)
+        await callback.message.answer(
+            "😔 Не получилось сделать разбор. Попробуй ещё раз через минуту или напиши /start."
+        )
 
 
 @router.message(ProductStates.partner_birth_date)
@@ -241,6 +280,8 @@ async def partner_date_received(
     data = await state.get_data()
     product = ProductType(data.get("pending_product", "love"))
     user = await UserRepository(session).get_by_telegram_id(message.from_user.id)
+    if user:
+        await _save_partner_date(session, user, partner_date)
 
     if await EntitlementService(session).can_use_full(user, product):
         await _deliver_full(message, session, settings, user, product, partner_date, data.get("question_text"))
@@ -260,7 +301,7 @@ async def pay_full(callback: CallbackQuery, state: FSMContext, session: AsyncSes
     product = PRODUCT_MAP[callback.data.split(":")[2]]
     user = await UserRepository(session).get_by_telegram_id(callback.from_user.id)
     data = await state.get_data()
-    partner_date = date.fromisoformat(data["partner_birth_date"]) if data.get("partner_birth_date") else None
+    partner_date = _resolve_partner_date(user, data)
 
     if await EntitlementService(session).can_use_full(user, product):
         await _deliver_full(callback.message, session, settings, user, product, partner_date, data.get("question_text"))

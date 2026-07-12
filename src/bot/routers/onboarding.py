@@ -14,7 +14,6 @@ from src.db.models import ProductType
 from src.db.repositories import ContentRepository, ReferralRepository, UserRepository
 from src.engines.astro import zodiac_sign
 from src.engines.numerology import life_path_number
-from src.integrations.kie_client import KieClient
 from src.services.content_generation import ContentGenerationService
 from src.services.products import EntitlementService
 from src.services.referral import ReferralService
@@ -53,11 +52,17 @@ async def collect_name(message: Message, state: FSMContext, session: AsyncSessio
 
 
 @router.message(OnboardingStates.birth_date)
-async def collect_birth_date(message: Message, state: FSMContext) -> None:
+async def collect_birth_date(message: Message, state: FSMContext, session: AsyncSession) -> None:
     birth_date = parse_birth_date(message.text or "")
     if not birth_date:
         await message.answer("Не могу распознать дату. Введи в формате ДД.ММ.ГГГГ")
         return
+
+    users = UserRepository(session)
+    user = await users.get_by_telegram_id(message.from_user.id)
+    if user:
+        await users.update_profile(user, birth_date=birth_date, onboarding_step="birth_time")
+
     await state.update_data(birth_date=birth_date.isoformat())
     await message.answer(
         "📅 Введите время рождения (ЧЧ:ММ) или нажмите «Пропустить»",
@@ -67,17 +72,26 @@ async def collect_birth_date(message: Message, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data == "onboarding:skip_time")
-async def skip_birth_time(callback: CallbackQuery, state: FSMContext) -> None:
+async def skip_birth_time(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    users = UserRepository(session)
+    user = await users.get_by_telegram_id(callback.from_user.id)
+    if user:
+        await users.update_profile(user, onboarding_step="birth_place")
     await callback.message.answer("📍 Ваше место рождения (город):")
     await state.set_state(OnboardingStates.birth_place)
     await callback.answer()
 
 
 @router.message(OnboardingStates.birth_time)
-async def collect_birth_time(message: Message, state: FSMContext) -> None:
+async def collect_birth_time(message: Message, state: FSMContext, session: AsyncSession) -> None:
     birth_time = parse_birth_time(message.text or "")
-    if birth_time:
+    users = UserRepository(session)
+    user = await users.get_by_telegram_id(message.from_user.id)
+    if birth_time and user:
+        await users.update_profile(user, birth_time=birth_time, onboarding_step="birth_place")
         await state.update_data(birth_time=birth_time.isoformat())
+    elif user:
+        await users.update_profile(user, onboarding_step="birth_place")
     await message.answer("📍 Ваше место рождения (город):")
     await state.set_state(OnboardingStates.birth_place)
 
@@ -89,17 +103,22 @@ async def collect_birth_place(
     session: AsyncSession,
     settings: Settings,
 ) -> None:
+    users = UserRepository(session)
+    user = await users.get_by_telegram_id(message.from_user.id)
     data = await state.get_data()
-    birth_date = date.fromisoformat(data["birth_date"])
-    birth_time = None
-    if data.get("birth_time"):
-        birth_time = datetime.fromisoformat(f"2000-01-01T{data['birth_time']}").time()
+
+    if user and user.birth_date:
+        birth_date = user.birth_date
+        birth_time = user.birth_time
+    else:
+        birth_date = date.fromisoformat(data["birth_date"])
+        birth_time = None
+        if data.get("birth_time"):
+            birth_time = datetime.fromisoformat(f"2000-01-01T{data['birth_time']}").time()
 
     zodiac = zodiac_sign(birth_date)
     lp = life_path_number(birth_date)
 
-    users = UserRepository(session)
-    user = await users.get_by_telegram_id(message.from_user.id)
     if user:
         await users.update_profile(
             user,
