@@ -22,21 +22,29 @@ Git remote Amvera: `https://git.amvera.ru/ntshvrabota/run-tarot-robobot`
 
 ## 2. Push в Amvera
 
+**Важно:** push нужно выполнить **в терминале на Mac** (нужен логин/пароль Amvera):
+
 ```bash
 cd /Users/admin/Desktop/bot
-
-# один раз
-git remote add amvera https://git.amvera.ru/ntshvrabota/run-tarot-robobot
-
-# каждое обновление
-git add .
-git commit -m "описание изменений"
-git push amvera main:master
+./scripts/deploy_amvera.sh
 ```
 
-Логин/пароль — учётная запись Amvera.
+Или вручную:
 
-> Amvera использует ветку `master`. Локальная ветка `main` пушится как `main:master`.
+```bash
+bash scripts/stop_local.sh          # остановить локальный бот
+git push amvera main:master         # логин = имя пользователя Amvera
+```
+
+Проверить переменные для панели:
+
+```bash
+./scripts/amvera_env_checklist.sh
+```
+
+> **Альтернатива:** в Amvera можно подключить GitHub как второй remote  
+> ([документация](https://docs.amvera.ru/applications/git/secondary-origin.html))  
+> и тянуть код из `https://github.com/ntshv-maker/tarot-robobot`.
 
 ## 3. Что происходит на сервере
 
