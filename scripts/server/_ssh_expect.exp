@@ -1,0 +1,17 @@
+#!/usr/bin/expect -f
+set timeout 600
+set password $env(VPS_PASSWORD)
+set user $env(VPS_USER)
+set host $env(VPS_HOST)
+set cmd $env(VPS_CMD)
+
+spawn ssh -o StrictHostKeyChecking=accept-new ${user}@${host} $cmd
+expect {
+    -re "(?i)password:" {
+        send "$password\r"
+        exp_continue
+    }
+    eof
+}
+catch wait result
+exit [lindex $result 3]

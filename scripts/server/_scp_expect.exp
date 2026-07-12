@@ -1,0 +1,18 @@
+#!/usr/bin/expect -f
+set timeout 600
+set password $env(VPS_PASSWORD)
+set user $env(VPS_USER)
+set host $env(VPS_HOST)
+set local $env(SCP_LOCAL)
+set remote $env(SCP_REMOTE)
+
+spawn scp -o StrictHostKeyChecking=accept-new $local ${user}@${host}:$remote
+expect {
+    -re "(?i)password:" {
+        send "$password\r"
+        exp_continue
+    }
+    eof
+}
+catch wait result
+exit [lindex $result 3]

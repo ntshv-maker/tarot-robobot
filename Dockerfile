@@ -15,7 +15,7 @@ COPY assets ./assets
 COPY scripts ./scripts
 
 RUN pip install --no-cache-dir -e . \
-    && chmod +x scripts/start_production.sh
+    && chmod +x scripts/start_production.sh scripts/docker-entrypoint-bot.sh
 
 ENV PYTHONUNBUFFERED=1 \
     LOCAL_DEV=false \
