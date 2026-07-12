@@ -4,10 +4,11 @@ import structlog
 from datetime import date
 
 from aiogram import F, Router
-from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.bot.helpers.telegram import answer_callback, reply_to_callback
 
 from src.bot.keyboards import (
     after_full_keyboard,
@@ -193,26 +194,29 @@ async def generate_mini(
     session: AsyncSession,
     settings: Settings,
 ) -> None:
-    try:
-        await callback.answer("⏳ Готовлю разбор...")
-    except TelegramBadRequest:
-        pass
+    await answer_callback(callback)
 
     try:
         product = PRODUCT_MAP[callback.data.split(":")[2]]
     except (IndexError, KeyError):
-        await callback.message.answer("Не удалось распознать продукт. Нажми /start и попробуй снова.")
+        await reply_to_callback(
+            callback,
+            "Не удалось распознать продукт. Нажми /start и попробуй снова.",
+        )
         return
 
     user = await UserRepository(session).get_by_telegram_id(callback.from_user.id)
     if not user or not user.onboarding_complete:
-        await callback.message.answer("Сначала пройди регистрацию — нажми /start и заполни анкету.")
+        await reply_to_callback(
+            callback,
+            "Сначала пройди регистрацию — нажми /start и заполни анкету.",
+        )
         return
 
     data = await state.get_data()
 
     if product == ProductType.QUESTION and not data.get("question_text"):
-        await callback.message.answer("💬 Сначала напиши свой вопрос одним сообщением:")
+        await reply_to_callback(callback, "💬 Сначала напиши свой вопрос одним сообщением:")
         await state.set_state(ProductStates.question_text)
         await state.update_data(pending_product=product.value)
         return
@@ -220,24 +224,33 @@ async def generate_mini(
     partner_date = _resolve_partner_date(user, data)
 
     if product == ProductType.LOVE and not partner_date:
-        await callback.message.answer("📅 Введите дату рождения партнёра (ДД.ММ.ГГГГ):")
+        await reply_to_callback(callback, "📅 Введите дату рождения партнёра (ДД.ММ.ГГГГ):")
         await state.set_state(ProductStates.partner_birth_date)
         await state.update_data(pending_product=product.value)
         return
 
     if product == ProductType.LOVE and partner_date and user.partner_birth_date == partner_date:
-        await callback.message.answer(
-            f"💞 Использую сохранённую дату партнёра: {partner_date.strftime('%d.%m.%Y')}"
+        await reply_to_callback(
+            callback,
+            f"💞 Использую сохранённую дату партнёра: {partner_date.strftime('%d.%m.%Y')}",
         )
 
+    await reply_to_callback(callback, "⏳ Готовлю бесплатный разбор, подожди немного...")
+
     try:
-        cached = await ContentRepository(session).get_recent(user.id, product, "mini")
-        if cached:
-            await callback.message.answer(cached.text, reply_markup=mini_full_keyboard(product))
-            await callback.message.answer("📦 КОМБО-ПАКЕТЫ:", reply_markup=packages_keyboard())
+        cached = None
+        try:
+            cached = await ContentRepository(session).get_recent(user.id, product, "mini")
+        except Exception as cache_exc:
+            await session.rollback()
+            logger.warning("get_recent_failed", error=str(cache_exc), product=product.value, user_id=user.id)
+
+        if cached and cached.text.strip():
+            await reply_to_callback(callback, cached.text, reply_markup=mini_full_keyboard(product))
+            await reply_to_callback(callback, "📦 КОМБО-ПАКЕТЫ:", reply_markup=packages_keyboard())
             return
 
-        await send_thinking_sticker(callback.message, callback.bot, settings)
+        await send_thinking_sticker(callback.message, callback.bot, settings) if callback.message else None
         svc = ContentGenerationService(settings, session)
         text = sanitize_telegram_html(
             await svc.generate(
@@ -248,6 +261,9 @@ async def generate_mini(
                 question_text=data.get("question_text"),
             )
         )
+        if not text.strip():
+            text = "✨ Персональный разбор готов. Напиши /start, если текст не отображается."
+
         await ContentRepository(session).save(
             user.id,
             product,
@@ -255,13 +271,14 @@ async def generate_mini(
             text,
             {"partner": str(partner_date), "question": data.get("question_text")},
         )
-        await callback.message.answer(text, reply_markup=mini_full_keyboard(product))
-        await callback.message.answer("📦 КОМБО-ПАКЕТЫ:", reply_markup=packages_keyboard())
+        await reply_to_callback(callback, text, reply_markup=mini_full_keyboard(product))
+        await reply_to_callback(callback, "📦 КОМБО-ПАКЕТЫ:", reply_markup=packages_keyboard())
     except Exception as exc:
         await session.rollback()
         logger.exception("generate_mini_failed", error=str(exc), product=product.value, user_id=user.id)
-        await callback.message.answer(
-            "😔 Не получилось сделать разбор. Попробуй ещё раз через минуту или напиши /start."
+        await reply_to_callback(
+            callback,
+            "😔 Не получилось сделать разбор. Попробуй ещё раз через минуту или напиши /start.",
         )
 
 

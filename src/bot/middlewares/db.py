@@ -3,11 +3,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
 
+import structlog
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject, Update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.repositories import UserRepository
+
+logger = structlog.get_logger()
 
 
 class DbSessionMiddleware(BaseMiddleware):
@@ -35,9 +38,13 @@ class ActivityMiddleware(BaseMiddleware):
         session: AsyncSession | None = data.get("session")
         update: Update | None = data.get("event_update")
         if session and update and update.effective_user:
-            repo = UserRepository(session)
-            user = await repo.get_by_telegram_id(update.effective_user.id)
-            if user:
-                user.last_active_at = datetime.now(timezone.utc)
-                await session.commit()
+            try:
+                repo = UserRepository(session)
+                user = await repo.get_by_telegram_id(update.effective_user.id)
+                if user:
+                    user.last_active_at = datetime.now(timezone.utc)
+                    await session.commit()
+            except Exception as exc:
+                await session.rollback()
+                logger.warning("activity_middleware_failed", error=str(exc))
         return await handler(event, data)

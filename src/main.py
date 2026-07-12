@@ -6,11 +6,12 @@ from typing import Any
 
 import structlog
 from aiogram import Dispatcher
+from aiogram.types import CallbackQuery, ErrorEvent
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.storage.redis import RedisStorage
 from redis.asyncio import Redis
 
-from src.bot.logging_bot import LoggingBot
+from src.bot.helpers.telegram import answer_callback, reply_to_callback
 from src.bot.middlewares.chat_log import ChatLogMiddleware
 from src.bot.middlewares.db import ActivityMiddleware, DbSessionMiddleware
 from src.bot.middlewares.settings import SettingsMiddleware
@@ -52,6 +53,26 @@ async def main() -> None:
     dp.include_router(packages.router)
     dp.include_router(digest.router)
     dp.include_router(admin.router)
+
+    @dp.errors()
+    async def on_handler_error(event: ErrorEvent) -> bool:
+        logger.exception("handler_error", error=str(event.exception))
+        update = event.update
+        if not update:
+            return True
+        if update.callback_query:
+            callback: CallbackQuery = update.callback_query
+            await answer_callback(callback, "Произошла ошибка")
+            await reply_to_callback(
+                callback,
+                "😔 Что-то пошло не так. Нажми /start и попробуй снова.",
+            )
+        elif update.message and update.effective_user:
+            await event.bot.send_message(
+                update.effective_user.id,
+                "😔 Что-то пошло не так. Нажми /start и попробуй снова.",
+            )
+        return True
 
     scheduler = SchedulerService(bot, settings, async_session_factory, redis)
     scheduler.start()
