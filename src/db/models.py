@@ -190,7 +190,9 @@ class ChatMessage(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), index=True, nullable=True)
     telegram_id: Mapped[int] = mapped_column(BigInteger, index=True)
-    direction: Mapped[ChatDirection] = mapped_column(Enum(ChatDirection))
+    direction: Mapped[ChatDirection] = mapped_column(
+        Enum(ChatDirection, values_callable=lambda enum: [item.value for item in enum]),
+    )
     message_type: Mapped[str] = mapped_column(String(32), default="text")
     text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     callback_data: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

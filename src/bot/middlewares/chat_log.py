@@ -22,5 +22,5 @@ class ChatLogMiddleware(BaseMiddleware):
             try:
                 await log_incoming_update(session, update)
             except Exception:
-                pass
+                await session.rollback()
         return await handler(event, data)
