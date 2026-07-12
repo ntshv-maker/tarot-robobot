@@ -70,7 +70,7 @@ PUB_KEY="$(cat "${DEPLOY_KEY}.pub")"
 ssh_cmd "mkdir -p ~/.ssh && chmod 700 ~/.ssh && grep -qxF '$PUB_KEY' ~/.ssh/authorized_keys 2>/dev/null || echo '$PUB_KEY' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
 
 echo "==> Upload production .env"
-scp_cmd <(bash "$(dirname "$0")/build-server-env.sh") "${VPS_USER}@${VPS_HOST}:${APP_DIR}/.env"
+scp_cmd <(python3 "$(dirname "$0")/build-server-env.py") "${VPS_USER}@${VPS_HOST}:${APP_DIR}/.env"
 ssh_cmd "chmod 600 ${APP_DIR}/.env"
 
 echo "==> First deploy"
