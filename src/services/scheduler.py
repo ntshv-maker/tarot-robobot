@@ -12,7 +12,7 @@ from src.bot.keyboards import (
     digest_opt_in_keyboard,
     evening_spread_keyboard,
     funnel_day2_keyboard,
-    packages_keyboard,
+    subscription_plans_keyboard,
     product_inline_keyboard,
 )
 from src.config import Settings
@@ -186,7 +186,7 @@ class SchedulerService:
                         user.telegram_id,
                         f"{user.name}, пока не выбрали тариф — может, персональная скидка поможет?\n\n"
                         "Вы можете вернуться в любой момент!",
-                        reply_markup=packages_keyboard(),
+                        reply_markup=subscription_plans_keyboard(ProductType.LOVE),
                     )
                 except Exception as exc:
                     logger.warning("nudge_failed", error=str(exc))

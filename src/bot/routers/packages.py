@@ -4,7 +4,8 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.bot.keyboards import packages_keyboard
+from src.bot.keyboards import subscription_plans_keyboard
+from src.db.models import ProductType
 from src.db.repositories import UserRepository
 
 router = Router()
@@ -19,10 +20,8 @@ async def show_packages(callback: CallbackQuery, session: AsyncSession) -> None:
         return
 
     await callback.message.answer(
-        "📦 КОМБО-ПАКЕТЫ (Выгоднее, чем по отдельности)\n\n"
-        "🎁 «Счастливая женщина» — 990₽\n"
-        "💗 «ЛЮБОВЬ+» — 1200₽/мес\n"
-        "👑 «VIP-пакет» — 2300₽/мес",
-        reply_markup=packages_keyboard(),
+        "✨ Подписка на полные разборы по всем темам:\n\n"
+        "Выбери срок — после оплаты нажми «🔓 Полный разбор» под любым мини-разбором:",
+        reply_markup=subscription_plans_keyboard(ProductType.LOVE),
     )
     await callback.answer()

@@ -44,6 +44,10 @@ class ContentGenerationService:
             "today": ref.strftime("%d.%m.%Y"),
             "version": version,
         }
+        if version == "mini":
+            facts["brief_note"] = (
+                "ВАЖНО: мини-версия — максимум 3–4 коротких предложения, только суть, без воды."
+            )
 
         if user.birth_date:
             lp = life_path_number(user.birth_date)

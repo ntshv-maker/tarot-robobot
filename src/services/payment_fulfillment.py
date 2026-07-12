@@ -45,11 +45,16 @@ async def confirm_purchase(
 
     product_label = PRODUCT_LABELS.get(purchase.product_type, purchase.product_type.value)
 
-    if purchase.product_type in {ProductType.HAPPY_WOMAN, ProductType.LOVE_PLUS, ProductType.VIP}:
-        await bot.send_message(
-            user.telegram_id,
-            f"🎉 Пакет «{product_label}» активирован!",
-        )
+    if purchase.product_type in {ProductType.PREMIUM, ProductType.HAPPY_WOMAN, ProductType.LOVE_PLUS, ProductType.VIP}:
+        if purchase.product_type == ProductType.PREMIUM:
+            months = purchase.question_text or "1"
+            msg = (
+                f"🎉 Подписка активирована на {months} мес.!\n\n"
+                "Теперь нажми «🔓 Полный разбор» под любым мини-разбором — получишь полную версию."
+            )
+        else:
+            msg = f"🎉 Пакет «{product_label}» активирован!"
+        await bot.send_message(user.telegram_id, msg)
         return FulfillmentResult(
             purchase_id,
             "ok",

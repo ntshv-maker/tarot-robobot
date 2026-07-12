@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
-from src.constants import PRODUCT_LABELS, PRODUCT_PRICES
+from src.constants import PRODUCT_LABELS, SUBSCRIPTION_PLANS
 from src.db.models import ProductType
 
 
@@ -29,10 +29,9 @@ def product_menu_keyboard(has_subscription: bool = False) -> ReplyKeyboardMarkup
             KeyboardButton(text="🔮 Личный прогноз"),
             KeyboardButton(text="💡 Ответ на вопрос"),
         ],
-        [KeyboardButton(text="📦 Тарифы и пакеты")],
     ]
     if has_subscription:
-        rows.append([KeyboardButton(text="▶️ Запустить")])
+        rows.append([KeyboardButton(text="✨ Подписка активна")])
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
 
@@ -52,14 +51,35 @@ def product_inline_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def mini_full_keyboard(product: ProductType) -> InlineKeyboardMarkup:
-    price = PRODUCT_PRICES[product]
+def mini_result_keyboard(product: ProductType) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔓 Полный разбор", callback_data=f"full:reading:{product.value}")],
+        ]
+    )
+
+
+def subscription_plans_keyboard(product: ProductType) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="🆓 Бесплатная версия", callback_data=f"gen:mini:{product.value}"),
-                InlineKeyboardButton(text=f"🔓 Полная версия — {price}₽", callback_data=f"pay:full:{product.value}"),
-            ]
+                InlineKeyboardButton(
+                    text=str(SUBSCRIPTION_PLANS[1]["label"]),
+                    callback_data=f"sub:buy:1:{product.value}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=str(SUBSCRIPTION_PLANS[2]["label"]),
+                    callback_data=f"sub:buy:2:{product.value}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=str(SUBSCRIPTION_PLANS[3]["label"]),
+                    callback_data=f"sub:buy:3:{product.value}",
+                )
+            ],
         ]
     )
 
@@ -80,18 +100,7 @@ def after_full_keyboard(content_id: int) -> InlineKeyboardMarkup:
                     text="💬 Задать вопрос к разбору",
                     callback_data=f"followup:{content_id}",
                 ),
-                InlineKeyboardButton(text="📦 Тарифы и пакеты", callback_data="packages:show"),
             ]
-        ]
-    )
-
-
-def packages_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🎁 Счастливая женщина — 990₽", callback_data="pay:full:happy_woman")],
-            [InlineKeyboardButton(text="💗 ЛЮБОВЬ+ — 1200₽/мес", callback_data="pay:full:love_plus")],
-            [InlineKeyboardButton(text="👑 VIP — 2300₽/мес", callback_data="pay:full:vip")],
         ]
     )
 

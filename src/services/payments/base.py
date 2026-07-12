@@ -17,9 +17,19 @@ class PaymentProvider(ABC):
 
 class ManualPaymentProvider(PaymentProvider):
     async def create_payment(self, user: User, purchase: Purchase) -> str:
+        from src.constants import PRODUCT_LABELS, SUBSCRIPTION_PLANS
+        from src.db.models import ProductType
+
+        if purchase.product_type == ProductType.PREMIUM:
+            months = int(purchase.question_text or "1")
+            plan_label = SUBSCRIPTION_PLANS.get(months, {}).get("label", f"{months} мес.")
+            product_line = f"Подписка: {plan_label}"
+        else:
+            product_line = f"Продукт: {PRODUCT_LABELS.get(purchase.product_type, purchase.product_type.value)}"
+
         return (
             f"💳 Оплата: {purchase.amount_rub} ₽\n"
-            f"Продукт: {purchase.product_type.value}\n\n"
+            f"{product_line}\n\n"
             "Переведите сумму на реквизиты, указанные администратором, "
             "затем нажмите «Я оплатил(а)».\n"
             f"ID заказа: #{purchase.id}"

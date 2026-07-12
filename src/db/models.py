@@ -36,6 +36,7 @@ class ProductType(str, enum.Enum):
     HAPPY_WOMAN = "happy_woman"
     LOVE_PLUS = "love_plus"
     VIP = "vip"
+    PREMIUM = "premium"
     NUMEROLOGY_PORTRAIT = "numerology_portrait"
     DAILY_MORNING = "daily_morning"
     WEEKLY_HOROSCOPE = "weekly_horoscope"

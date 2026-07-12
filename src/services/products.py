@@ -14,7 +14,16 @@ class EntitlementService:
         self.purchases = PurchaseRepository(session)
         self.subscriptions = SubscriptionRepository(session)
 
+    async def has_premium_access(self, user_id: int) -> bool:
+        active = await self.subscriptions.get_active(user_id)
+        for sub in active:
+            if sub.product_type in {ProductType.PREMIUM, ProductType.VIP}:
+                return True
+        return False
+
     async def has_active_subscription(self, user_id: int, product_type: ProductType) -> bool:
+        if await self.has_premium_access(user_id):
+            return True
         active = await self.subscriptions.get_active(user_id)
         for sub in active:
             if sub.product_type == ProductType.VIP:
@@ -72,10 +81,11 @@ class ProductService:
         user: User,
         product_type: ProductType,
         *,
+        amount_rub: int | None = None,
         partner_birth_date=None,
         question_text: str | None = None,
     ):
-        amount = self.price_for(product_type, user)
+        amount = amount_rub if amount_rub is not None else self.price_for(product_type, user)
         return await self.purchases.create(
             user.id,
             product_type,
@@ -91,7 +101,11 @@ class ProductService:
             user.referral_discount_percent = 0
             await self.session.commit()
 
-        if purchase.product_type in {ProductType.LOVE_PLUS, ProductType.VIP}:
+        if purchase.product_type == ProductType.PREMIUM:
+            months = int(purchase.question_text or "1")
+            days = months * 30
+            await self.subscriptions.activate(purchase.user_id, ProductType.PREMIUM, days=days)
+        elif purchase.product_type in {ProductType.LOVE_PLUS, ProductType.VIP}:
             await self.subscriptions.activate(purchase.user_id, purchase.product_type)
         elif purchase.product_type == ProductType.HAPPY_WOMAN:
             await self.subscriptions.activate(purchase.user_id, ProductType.HAPPY_WOMAN)

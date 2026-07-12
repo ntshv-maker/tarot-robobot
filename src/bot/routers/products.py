@@ -9,19 +9,17 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.bot.helpers.telegram import answer_callback, reply_to_callback
-
 from src.bot.keyboards import (
     after_full_keyboard,
-    mini_full_keyboard,
-    packages_keyboard,
+    mini_result_keyboard,
     payment_keyboard,
-    product_menu_keyboard,
+    subscription_plans_keyboard,
 )
 from src.bot.onboarding_guard import ensure_onboarding_complete
 from src.bot.routers.onboarding import parse_birth_date
 from src.bot.states import ProductStates
 from src.config import Settings
-from src.constants import PRODUCT_LABELS, PRODUCT_PRICES
+from src.constants import PRODUCT_LABELS, SUBSCRIPTION_PLANS
 from src.db.models import ProductType
 from src.db.repositories import ContentRepository, UserRepository
 from src.services.content_generation import ContentGenerationService
@@ -41,6 +39,7 @@ PRODUCT_MAP = {
     "happy_woman": ProductType.HAPPY_WOMAN,
     "love_plus": ProductType.LOVE_PLUS,
     "vip": ProductType.VIP,
+    "premium": ProductType.PREMIUM,
 }
 
 TEXT_TO_PRODUCT = {
@@ -51,33 +50,6 @@ TEXT_TO_PRODUCT = {
     "💡 Ответ на вопрос": ProductType.QUESTION,
 }
 
-PRODUCT_DESCRIPTIONS = {
-    ProductType.LOVE: (
-        "❤️ «Любовь» — 550₽\n\n"
-        "Узнай, что происходит в вашей паре: мысли партнёра, чувства, конфликты, кармическая связь.\n\n"
-        "✔️ Перестанешь гадать — начнёшь понимать."
-    ),
-    ProductType.FORECAST_MONTH: (
-        "📆 «Личный прогноз на месяц» — 550₽\n\n"
-        "Что готовит ближайший месяц в любви, деньгах и здоровье?\n\n"
-        "✔️ Будешь на шаг впереди событий."
-    ),
-    ProductType.WEALTH: (
-        "💰 «Код богатства» — 390₽\n\n"
-        "Твой денежный код, «чёрные дыры» и лучшие сферы заработка.\n\n"
-        "✔️ Деньги начнут приходить легче."
-    ),
-    ProductType.NEGATIVE: (
-        "🛡️ «Есть ли на мне негатив?» — 300₽\n\n"
-        "Энергетическая диагностика 5 сфер жизни.\n\n"
-        "⚠️ Это инструмент самопознания, не медицинский диагноз."
-    ),
-    ProductType.QUESTION: (
-        "💡 «Ответ на вопрос» — 500₽\n\n"
-        "Задай любой вопрос — карты подскажут, что делать дальше."
-    ),
-}
-
 
 async def _require_profile(message: Message, session: AsyncSession):
     user = await UserRepository(session).get_by_telegram_id(message.from_user.id)
@@ -86,15 +58,43 @@ async def _require_profile(message: Message, session: AsyncSession):
     return user
 
 
-async def _send_product_pitch(message: Message, product: ProductType) -> None:
-    desc = PRODUCT_DESCRIPTIONS.get(product, PRODUCT_LABELS[product])
-    await message.answer(desc, reply_markup=mini_full_keyboard(product))
-
-
-def _resolve_partner_date(user, data: dict) -> date | None:
+def _resolve_partner_date(user, data: dict, payload: dict | None = None) -> date | None:
     if data.get("partner_birth_date"):
         return date.fromisoformat(data["partner_birth_date"])
+    if payload and payload.get("partner") and payload["partner"] not in {"None", ""}:
+        try:
+            from datetime import datetime as dt
+
+            return dt.strptime(payload["partner"], "%Y-%m-%d").date()
+        except ValueError:
+            pass
     return user.partner_birth_date if user else None
+
+
+def _resolve_question_text(data: dict, payload: dict | None = None) -> str | None:
+    if data.get("question_text"):
+        return data["question_text"]
+    if payload and payload.get("question") and payload["question"] not in {"None", ""}:
+        return payload["question"]
+    return None
+
+
+async def _reading_context(
+    session: AsyncSession,
+    user,
+    product: ProductType,
+    data: dict,
+) -> tuple[date | None, str | None]:
+    payload: dict | None = None
+    try:
+        recent = await ContentRepository(session).get_recent(user.id, product, "mini")
+        if recent:
+            payload = recent.input_payload or {}
+    except Exception:
+        pass
+    partner_date = _resolve_partner_date(user, data, payload)
+    question_text = _resolve_question_text(data, payload)
+    return partner_date, question_text
 
 
 async def _save_partner_date(session: AsyncSession, user, partner_date: date) -> None:
@@ -133,37 +133,127 @@ async def _deliver_full(
     await session.commit()
 
 
-@router.message(F.text.in_(list(TEXT_TO_PRODUCT.keys()) + ["📦 Тарифы и пакеты", "▶️ Запустить"]))
-async def product_from_menu(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    user = await _require_profile(message, session)
-    if not user:
-        return
+async def _deliver_mini(
+    message: Message,
+    session: AsyncSession,
+    settings: Settings,
+    user,
+    product: ProductType,
+    partner_date: date | None,
+    question_text: str | None,
+) -> None:
+    await message.answer("⏳ Готовлю краткий разбор...")
+    await send_thinking_sticker(message, message.bot, settings)
+    svc = ContentGenerationService(settings, session)
+    text = sanitize_telegram_html(
+        await svc.generate(
+            user,
+            product,
+            version="mini",
+            partner_birth_date=partner_date,
+            question_text=question_text,
+        )
+    )
+    if not text.strip():
+        text = "✨ Краткий разбор готов. Нажми «Полный разбор» ниже, чтобы узнать больше."
 
-    if message.text == "📦 Тарифы и пакеты":
-        await message.answer("📦 КОМБО-ПАКЕТЫ:", reply_markup=packages_keyboard())
-        return
+    await ContentRepository(session).save(
+        user.id,
+        product,
+        "mini",
+        text,
+        {"partner": str(partner_date), "question": question_text},
+    )
+    await message.answer(text, reply_markup=mini_result_keyboard(product))
 
-    if message.text == "▶️ Запустить":
-        subs = await EntitlementService(session).get_active_subscription_types(user.id)
-        if ProductType.VIP in subs:
-            await message.answer("👑 VIP активен! Выбери любую тему из меню.")
-        elif ProductType.LOVE_PLUS in subs:
-            await _send_product_pitch(message, ProductType.LOVE)
-        else:
-            await message.answer("Выбери тему из меню 👇")
-        return
 
-    product = TEXT_TO_PRODUCT[message.text]
-    if product == ProductType.QUESTION:
+async def _start_reading_flow(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    settings: Settings,
+    user,
+    product: ProductType,
+) -> None:
+    data = await state.get_data()
+
+    if product == ProductType.QUESTION and not data.get("question_text"):
         await message.answer("💬 Напиши свой вопрос одним сообщением:")
         await state.set_state(ProductStates.question_text)
         await state.update_data(product=product.value)
         return
-    await _send_product_pitch(message, product)
+
+    partner_date = _resolve_partner_date(user, data)
+    if product == ProductType.LOVE and not partner_date:
+        await message.answer("📅 Введите дату рождения партнёра (ДД.ММ.ГГГГ):")
+        await state.set_state(ProductStates.partner_birth_date)
+        await state.update_data(pending_product=product.value)
+        return
+
+    await _deliver_mini(message, session, settings, user, product, partner_date, data.get("question_text"))
+    await state.set_state(None)
+
+
+async def _handle_full_reading(
+    message: Message,
+    session: AsyncSession,
+    settings: Settings,
+    user,
+    product: ProductType,
+    state: FSMContext,
+) -> None:
+    data = await state.get_data()
+    partner_date, question_text = await _reading_context(session, user, product, data)
+
+    if product == ProductType.QUESTION and not question_text:
+        await message.answer("💬 Сначала получи мини-разбор: задай вопрос через меню «💡 Ответ на вопрос».")
+        return
+
+    if product == ProductType.LOVE and not partner_date:
+        await message.answer("📅 Сначала укажи дату рождения партнёра — выбери «💞 Любовь» в меню.")
+        return
+
+    if await EntitlementService(session).has_premium_access(user.id):
+        await _deliver_full(message, session, settings, user, product, partner_date, question_text)
+        return
+
+    if await EntitlementService(session).has_active_subscription(user.id, product):
+        await _deliver_full(message, session, settings, user, product, partner_date, question_text)
+        return
+
+    await message.answer(
+        "🔓 Полный разбор доступен по подписке.\n\n"
+        "Выбери тариф — после оплаты нажми «Полный разбор» снова:",
+        reply_markup=subscription_plans_keyboard(product),
+    )
+
+
+@router.message(F.text.in_(list(TEXT_TO_PRODUCT.keys()) + ["✨ Подписка активна"]))
+async def product_from_menu(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    settings: Settings,
+) -> None:
+    user = await _require_profile(message, session)
+    if not user:
+        return
+
+    if message.text == "✨ Подписка активна":
+        await message.answer("✨ У тебя активная подписка! Выбери тему из меню — получишь мини-разбор, затем полный.")
+        return
+
+    product = TEXT_TO_PRODUCT[message.text]
+    await _start_reading_flow(message, state, session, settings, user, product)
 
 
 @router.callback_query(F.data.startswith("product:"))
-async def product_callback(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+async def product_callback(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    settings: Settings,
+) -> None:
     user = await UserRepository(session).get_by_telegram_id(callback.from_user.id)
     if not user or not user.onboarding_complete:
         await callback.message.answer("Сначала пройди регистрацию — нажми /start и заполни анкету.")
@@ -171,115 +261,22 @@ async def product_callback(callback: CallbackQuery, state: FSMContext, session: 
         return
 
     product = PRODUCT_MAP[callback.data.split(":")[1]]
-    if product == ProductType.QUESTION:
-        await callback.message.answer("💬 Напиши свой вопрос одним сообщением:")
-        await state.set_state(ProductStates.question_text)
-        await state.update_data(product=product.value)
-    else:
-        await _send_product_pitch(callback.message, product)
+    await _start_reading_flow(callback.message, state, session, settings, user, product)
     await callback.answer()
 
 
 @router.message(ProductStates.question_text)
-async def question_received(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    await state.update_data(question_text=message.text.strip())
-    await _send_product_pitch(message, ProductType.QUESTION)
-    await state.set_state(None)
-
-
-@router.callback_query(F.data.startswith("gen:mini:"))
-async def generate_mini(
-    callback: CallbackQuery,
+async def question_received(
+    message: Message,
     state: FSMContext,
     session: AsyncSession,
     settings: Settings,
 ) -> None:
-    await answer_callback(callback)
-
-    try:
-        product = PRODUCT_MAP[callback.data.split(":")[2]]
-    except (IndexError, KeyError):
-        await reply_to_callback(
-            callback,
-            "Не удалось распознать продукт. Нажми /start и попробуй снова.",
-        )
+    await state.update_data(question_text=message.text.strip())
+    user = await UserRepository(session).get_by_telegram_id(message.from_user.id)
+    if not user:
         return
-
-    user = await UserRepository(session).get_by_telegram_id(callback.from_user.id)
-    if not user or not user.onboarding_complete:
-        await reply_to_callback(
-            callback,
-            "Сначала пройди регистрацию — нажми /start и заполни анкету.",
-        )
-        return
-
-    data = await state.get_data()
-
-    if product == ProductType.QUESTION and not data.get("question_text"):
-        await reply_to_callback(callback, "💬 Сначала напиши свой вопрос одним сообщением:")
-        await state.set_state(ProductStates.question_text)
-        await state.update_data(pending_product=product.value)
-        return
-
-    partner_date = _resolve_partner_date(user, data)
-
-    if product == ProductType.LOVE and not partner_date:
-        await reply_to_callback(callback, "📅 Введите дату рождения партнёра (ДД.ММ.ГГГГ):")
-        await state.set_state(ProductStates.partner_birth_date)
-        await state.update_data(pending_product=product.value)
-        return
-
-    if product == ProductType.LOVE and partner_date and user.partner_birth_date == partner_date:
-        await reply_to_callback(
-            callback,
-            f"💞 Использую сохранённую дату партнёра: {partner_date.strftime('%d.%m.%Y')}",
-        )
-
-    await reply_to_callback(callback, "⏳ Готовлю бесплатный разбор, подожди немного...")
-
-    try:
-        cached = None
-        try:
-            cached = await ContentRepository(session).get_recent(user.id, product, "mini")
-        except Exception as cache_exc:
-            await session.rollback()
-            logger.warning("get_recent_failed", error=str(cache_exc), product=product.value, user_id=user.id)
-
-        if cached and cached.text.strip():
-            await reply_to_callback(callback, cached.text, reply_markup=mini_full_keyboard(product))
-            await reply_to_callback(callback, "📦 КОМБО-ПАКЕТЫ:", reply_markup=packages_keyboard())
-            return
-
-        await send_thinking_sticker(callback.message, callback.bot, settings) if callback.message else None
-        svc = ContentGenerationService(settings, session)
-        text = sanitize_telegram_html(
-            await svc.generate(
-                user,
-                product,
-                version="mini",
-                partner_birth_date=partner_date,
-                question_text=data.get("question_text"),
-            )
-        )
-        if not text.strip():
-            text = "✨ Персональный разбор готов. Напиши /start, если текст не отображается."
-
-        await ContentRepository(session).save(
-            user.id,
-            product,
-            "mini",
-            text,
-            {"partner": str(partner_date), "question": data.get("question_text")},
-        )
-        await reply_to_callback(callback, text, reply_markup=mini_full_keyboard(product))
-        await reply_to_callback(callback, "📦 КОМБО-ПАКЕТЫ:", reply_markup=packages_keyboard())
-    except Exception as exc:
-        await session.rollback()
-        logger.exception("generate_mini_failed", error=str(exc), product=product.value, user_id=user.id)
-        await reply_to_callback(
-            callback,
-            "😔 Не получилось сделать разбор. Попробуй ещё раз через минуту или напиши /start.",
-        )
+    await _start_reading_flow(message, state, session, settings, user, ProductType.QUESTION)
 
 
 @router.message(ProductStates.partner_birth_date)
@@ -300,40 +297,112 @@ async def partner_date_received(
     if user:
         await _save_partner_date(session, user, partner_date)
 
-    if await EntitlementService(session).can_use_full(user, product):
-        await _deliver_full(message, session, settings, user, product, partner_date, data.get("question_text"))
-        await state.clear()
-        return
-
-    await send_thinking_sticker(message, message.bot, settings)
-    svc = ContentGenerationService(settings, session)
-    text = sanitize_telegram_html(await svc.generate(user, product, version="mini", partner_birth_date=partner_date))
-    await message.answer(text, reply_markup=mini_full_keyboard(product))
-    await message.answer("📦 КОМБО-ПАКЕТЫ:", reply_markup=packages_keyboard())
+    await _deliver_mini(
+        message,
+        session,
+        settings,
+        user,
+        product,
+        partner_date,
+        data.get("question_text"),
+    )
     await state.set_state(None)
 
 
-@router.callback_query(F.data.startswith("pay:full:"))
-async def pay_full(callback: CallbackQuery, state: FSMContext, session: AsyncSession, settings: Settings) -> None:
-    product = PRODUCT_MAP[callback.data.split(":")[2]]
-    user = await UserRepository(session).get_by_telegram_id(callback.from_user.id)
-    data = await state.get_data()
-    partner_date = _resolve_partner_date(user, data)
-
-    if await EntitlementService(session).can_use_full(user, product):
-        await _deliver_full(callback.message, session, settings, user, product, partner_date, data.get("question_text"))
-        await callback.answer("У вас уже есть доступ!")
+@router.callback_query(F.data.startswith("full:reading:"))
+async def full_reading_callback(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    settings: Settings,
+) -> None:
+    await answer_callback(callback)
+    try:
+        product = PRODUCT_MAP[callback.data.split(":")[2]]
+    except (IndexError, KeyError):
+        await reply_to_callback(callback, "Не удалось распознать тему. Нажми /start.")
         return
+
+    user = await UserRepository(session).get_by_telegram_id(callback.from_user.id)
+    if not user or not user.onboarding_complete:
+        await reply_to_callback(callback, "Сначала пройди регистрацию — /start")
+        return
+
+    if callback.message:
+        await _handle_full_reading(callback.message, session, settings, user, product, state)
+
+
+@router.callback_query(F.data.startswith("sub:buy:"))
+async def subscription_buy(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    await answer_callback(callback)
+    try:
+        months = int(callback.data.split(":")[2])
+        product_key = callback.data.split(":")[3]
+        product = PRODUCT_MAP[product_key]
+    except (IndexError, KeyError, ValueError):
+        await reply_to_callback(callback, "Не удалось оформить подписку. Попробуй снова.")
+        return
+
+    if months not in SUBSCRIPTION_PLANS:
+        await reply_to_callback(callback, "Такого тарифа нет.")
+        return
+
+    user = await UserRepository(session).get_by_telegram_id(callback.from_user.id)
+    if not user:
+        await reply_to_callback(callback, "Сначала /start")
+        return
+
+    plan = SUBSCRIPTION_PLANS[months]
+    await state.update_data(pending_full_product=product.value)
 
     purchase = await ProductService(session).create_purchase(
         user,
-        product,
-        partner_birth_date=partner_date,
-        question_text=data.get("question_text"),
+        ProductType.PREMIUM,
+        amount_rub=int(plan["price"]),
+        question_text=str(months),
     )
     instructions = await ManualPaymentProvider().create_payment(user, purchase)
-    await callback.message.answer(instructions, reply_markup=payment_keyboard(purchase.id))
-    await callback.answer()
+    await reply_to_callback(callback, instructions, reply_markup=payment_keyboard(purchase.id))
+
+
+@router.callback_query(F.data.startswith("gen:mini:"))
+async def legacy_gen_mini(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    settings: Settings,
+) -> None:
+    """Старые кнопки — перенаправляем в новый флоу."""
+    await answer_callback(callback)
+    try:
+        product = PRODUCT_MAP[callback.data.split(":")[2]]
+    except (IndexError, KeyError):
+        return
+    user = await UserRepository(session).get_by_telegram_id(callback.from_user.id)
+    if user and callback.message:
+        await _start_reading_flow(callback.message, state, session, settings, user, product)
+
+
+@router.callback_query(F.data.startswith("pay:full:"))
+async def legacy_pay_full(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    settings: Settings,
+) -> None:
+    """Старые кнопки оплаты — открываем подписку или полный разбор."""
+    await answer_callback(callback)
+    try:
+        product = PRODUCT_MAP[callback.data.split(":")[2]]
+    except (IndexError, KeyError):
+        return
+    user = await UserRepository(session).get_by_telegram_id(callback.from_user.id)
+    if user and callback.message:
+        await _handle_full_reading(callback.message, session, settings, user, product, state)
 
 
 @router.callback_query(F.data.startswith("payment:confirm:"))
@@ -354,7 +423,10 @@ async def payment_confirm(callback: CallbackQuery, session: AsyncSession, settin
             f"Amount: {purchase.amount_rub}₽\n\n"
             f"/confirm_payment {purchase.id}",
         )
-    await callback.message.answer("✅ Заявка отправлена! После проверки ты получишь полный разбор.")
+    await callback.message.answer(
+        "✅ Заявка отправлена! После проверки подписка активируется — "
+        "нажми «🔓 Полный разбор» под мини-разбором."
+    )
     await callback.answer()
 
 

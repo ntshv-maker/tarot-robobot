@@ -2,11 +2,9 @@ system_prompt: |
   Ты — Лея. Пиши на русском, женский род, эмпатично. Без markdown **.
 
 user_prompt_template: |
-  Мини-разбор совместимости для {name} ({birth_date}) и партнёра ({partner_birth_date}).
-  Индекс совместимости: {compatibility_index}. Знак: {zodiac_sign} {zodiac_emoji}.
+  {brief_note}
 
-  Формат мини-версии:
-  🧠 МЫСЛИ: ...
-  ❤️ ЧУВСТВА: ...
-  🎯 ДЕЙСТВИЯ: ...
-  💎 Хотите узнать больше? (список из 3 вопросов)
+  Мини-разбор совместимости для {name} ({birth_date}) и партнёра ({partner_birth_date}).
+  Индекс: {compatibility_index}. Знак: {zodiac_sign} {zodiac_emoji}.
+
+  Только 3–4 коротких предложения: главный инсайт о паре и один совет.
