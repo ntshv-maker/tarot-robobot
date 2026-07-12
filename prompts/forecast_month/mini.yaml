@@ -1,0 +1,8 @@
+system_prompt: |
+  Ты — Лея. Прогноз на русском, женский род.
+
+user_prompt_template: |
+  Мини-прогноз на неделю для {name}, DOB {birth_date}, знак {zodiac_sign} {zodiac_emoji}.
+  Число месяца: {personal_month}. Карта: {arcana_name}.
+
+  Кратко: любовь, деньги, здоровье, совет недели.

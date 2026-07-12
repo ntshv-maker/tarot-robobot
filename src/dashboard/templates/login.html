@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Вход — Astorobot Admin{% endblock %}
+{% block content %}
+<div style="max-width:400px;margin:80px auto;">
+  <div class="card">
+    <h1 class="page-title">Вход в дэшборд</h1>
+    {% if error == 'invalid' %}
+    <p style="color:var(--danger);margin-bottom:16px;">Неверный пароль</p>
+    {% elif error == 'no_password' %}
+    <p style="color:var(--warning);margin-bottom:16px;">DASHBOARD_PASSWORD не задан в .env</p>
+    {% endif %}
+    <form method="post" action="/login">
+      <label class="muted" for="password">Пароль администратора</label>
+      <input type="password" id="password" name="password" required
+        style="width:100%;margin:8px 0 16px;padding:12px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+      <button type="submit" class="btn btn-primary" style="width:100%;">Войти</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

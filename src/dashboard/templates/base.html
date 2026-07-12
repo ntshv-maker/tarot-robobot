@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Astorobot Admin{% endblock %}</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #242836;
+      --border: #2e3345;
+      --text: #e8eaf0;
+      --muted: #9aa3b5;
+      --accent: #7c6cff;
+      --accent-hover: #9488ff;
+      --success: #3ecf8e;
+      --warning: #f5a623;
+      --danger: #ff6b6b;
+      --in-bg: #2a3144;
+      --out-bg: #3d3560;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { color: var(--accent-hover); }
+    .layout { display: flex; min-height: 100vh; }
+    .sidebar {
+      width: 220px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 24px 16px;
+      flex-shrink: 0;
+    }
+    .sidebar h1 {
+      font-size: 1rem;
+      margin: 0 0 24px;
+      color: var(--muted);
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .nav a {
+      display: block;
+      padding: 10px 12px;
+      border-radius: 8px;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .nav a:hover, .nav a.active {
+      background: var(--surface2);
+      color: var(--accent-hover);
+    }
+    .main { flex: 1; padding: 28px 32px; overflow-x: auto; }
+    .page-title { font-size: 1.5rem; margin: 0 0 20px; font-weight: 600; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+    th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 500; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+    .badge-pending { background: rgba(245,166,35,0.15); color: var(--warning); }
+    .badge-paid { background: rgba(62,207,142,0.15); color: var(--success); }
+    .badge-cancelled { background: rgba(255,107,107,0.15); color: var(--danger); }
+    .btn {
+      display: inline-block;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-hover); color: #fff; }
+    .btn-danger { background: rgba(255,107,107,0.2); color: var(--danger); }
+    .btn-danger:hover { background: rgba(255,107,107,0.35); color: #fff; }
+    .btn-sm { padding: 5px 10px; font-size: 0.78rem; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+    .tabs a {
+      padding: 8px 16px;
+      border-radius: 8px;
+      background: var(--surface2);
+      color: var(--text);
+    }
+    .tabs a.active { background: var(--accent); color: #fff; }
+    .muted { color: var(--muted); font-size: 0.88rem; }
+    .stat { font-size: 0.85rem; color: var(--muted); margin-bottom: 16px; }
+    form.inline { display: inline; }
+    .search-form { display: flex; gap: 8px; margin-bottom: 20px; }
+    .search-form input {
+      flex: 1;
+      max-width: 360px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+    }
+    .chat-wrap { max-height: 70vh; overflow-y: auto; padding: 8px 0; }
+    .bubble {
+      max-width: 75%;
+      padding: 10px 14px;
+      border-radius: 14px;
+      margin-bottom: 10px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 0.92rem;
+    }
+    .bubble-in { background: var(--in-bg); margin-right: auto; border-bottom-left-radius: 4px; }
+    .bubble-out { background: var(--out-bg); margin-left: auto; border-bottom-right-radius: 4px; }
+    .bubble-meta { font-size: 0.72rem; color: var(--muted); margin-top: 4px; }
+    .user-header { margin-bottom: 16px; }
+    .user-header h2 { margin: 0 0 6px; }
+    @media (max-width: 768px) {
+      .layout { flex-direction: column; }
+      .sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h1>Лея Admin</h1>
+      <nav class="nav">
+        <a href="/purchases" class="{% if request.url.path.startswith('/purchases') %}active{% endif %}">💳 Заявки</a>
+        <a href="/users" class="{% if request.url.path.startswith('/users') %}active{% endif %}">👥 Пользователи</a>
+        <a href="/logout">🚪 Выход</a>
+      </nav>
+    </aside>
+    <main class="main">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,8 @@
+system_prompt: |
+  Ты — Лея. Нумерология богатства.
+
+user_prompt_template: |
+  Мини денежный код для {name}, DOB {birth_date}.
+  Число богатства: {wealth_number}. Число пути: {life_path_number}.
+
+  Кратко: сила, одна «чёрная дыра», один совет.

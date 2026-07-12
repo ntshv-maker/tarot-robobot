@@ -1,0 +1,11 @@
+.env
+__pycache__/
+data/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+assets/tarot/generated/
+*.egg-info/
+dist/
+build/

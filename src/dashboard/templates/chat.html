@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Чат — {{ user.name or user.first_name }} — Astorobot Admin{% endblock %}
+{% block content %}
+<div class="user-header">
+  <a href="/users" class="muted">← Пользователи</a>
+  <h2>{{ user.name or user.first_name or 'Пользователь' }}</h2>
+  <p class="muted">
+    @{{ user.username or '—' }} · Telegram {{ user.telegram_id }}
+    {% if user.birth_date %} · {{ user.birth_date.strftime('%d.%m.%Y') }}{% endif %}
+    {% if user.birth_place %} · {{ user.birth_place }}{% endif %}
+  </p>
+</div>
+
+{% if pending_purchases %}
+<div class="card">
+  <strong>Ожидают оплаты:</strong>
+  {% for p in pending_purchases %}
+  <div style="margin-top:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+    <span>#{{ p.id }} — {{ product_labels.get(p.product_type, p.product_type.value) }} — {{ p.amount_rub }} ₽</span>
+    <form class="inline" method="post" action="/purchases/{{ p.id }}/confirm">
+      <button type="submit" class="btn btn-primary btn-sm">Подтвердить</button>
+    </form>
+    <form class="inline" method="post" action="/purchases/{{ p.id }}/reject">
+      <button type="submit" class="btn btn-danger btn-sm">Отклонить</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="card">
+  <h3 style="margin:0 0 12px;font-size:1rem;">История переписки</h3>
+  <div class="chat-wrap">
+    {% for m in messages %}
+    <div class="bubble {% if m.direction.value == 'in' %}bubble-in{% else %}bubble-out{% endif %}">
+      {{ m.text or ('[' ~ m.message_type ~ ']') }}
+      <div class="bubble-meta">
+        {% if m.direction.value == 'in' %}← пользователь{% else %}→ бот{% endif %}
+        · {{ m.created_at.strftime('%d.%m.%Y %H:%M') if m.created_at else '' }}
+        {% if m.message_type != 'text' %} · {{ m.message_type }}{% endif %}
+      </div>
+    </div>
+    {% else %}
+    <p class="muted">Сообщений пока нет. История начнёт записываться после перезапуска бота с новой версией.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

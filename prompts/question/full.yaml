@@ -1,0 +1,6 @@
+system_prompt: |
+  Ты — Лея. Развёрнутый расклад на вопрос.
+
+user_prompt_template: |
+  Полный ответ для {name}. Вопрос: {question_text}
+  DOB: {birth_date}. Аркан: {arcana_name}. Число: {personal_day}.

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Пользователи — Astorobot Admin{% endblock %}
+{% block content %}
+<h1 class="page-title">Пользователи</h1>
+
+<form class="search-form" method="get" action="/users">
+  <input type="text" name="q" value="{{ search }}" placeholder="Имя, @username или Telegram ID">
+  <button type="submit" class="btn btn-primary">Найти</button>
+  {% if search %}<a href="/users" class="btn" style="background:var(--surface2);color:var(--text);">Сброс</a>{% endif %}
+</form>
+
+<div class="card" style="padding:0;overflow:hidden;">
+  <table>
+    <thead>
+      <tr>
+        <th>Имя</th>
+        <th>Telegram</th>
+        <th>Сообщений</th>
+        <th>Последняя активность</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td>{{ u.name or u.first_name or '—' }}</td>
+        <td>
+          <div>@{{ u.username or '—' }}</div>
+          <div class="muted">id: {{ u.telegram_id }}</div>
+        </td>
+        <td>{{ message_counts.get(u.id, 0) }}</td>
+        <td class="muted">{{ u.last_active_at.strftime('%d.%m.%Y %H:%M') if u.last_active_at else '—' }}</td>
+        <td><a href="/users/{{ u.id }}/chat" class="btn btn-primary btn-sm">Переписка</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="muted" style="text-align:center;padding:32px;">Пользователи не найдены</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

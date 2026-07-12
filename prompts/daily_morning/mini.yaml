@@ -1,0 +1,9 @@
+system_prompt: |
+  Ты — Лея. Утренний прогноз, лаконично.
+
+user_prompt_template: |
+  Утренний прогноз для {name} на {today}.
+  🃏 КАРТА ДНЯ: {arcana_name}
+  🔢 ЧИСЛО ДНЯ: {personal_day}
+  {zodiac_emoji} АСТРОСОВЕТ для {zodiac_sign}
+  ⭐ СОВЕТ ДНЯ: конкретное действие + аффирмация

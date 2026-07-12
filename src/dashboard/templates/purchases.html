@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Заявки — Astorobot Admin{% endblock %}
+{% block content %}
+<h1 class="page-title">Заявки на оплату</h1>
+<p class="stat">Ожидают: <strong>{{ pending_count }}</strong> · Оплачено: <strong>{{ paid_count }}</strong></p>
+
+<div class="tabs">
+  <a href="/purchases?status=pending" class="{% if status == 'pending' %}active{% endif %}">Ожидают</a>
+  <a href="/purchases?status=paid" class="{% if status == 'paid' %}active{% endif %}">Оплаченные</a>
+  <a href="/purchases?status=cancelled" class="{% if status == 'cancelled' %}active{% endif %}">Отклонённые</a>
+  <a href="/purchases?status=all" class="{% if status == 'all' %}active{% endif %}">Все</a>
+</div>
+
+<div class="card" style="padding:0;overflow:hidden;">
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Пользователь</th>
+        <th>Продукт</th>
+        <th>Сумма</th>
+        <th>Статус</th>
+        <th>Дата</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in purchases %}
+      <tr>
+        <td>{{ p.id }}</td>
+        <td>
+          {% if p.user %}
+          <a href="/users/{{ p.user.id }}/chat">{{ p.user.name or p.user.first_name or '—' }}</a>
+          <div class="muted">@{{ p.user.username or '—' }} · tg:{{ p.user.telegram_id }}</div>
+          {% else %}—{% endif %}
+        </td>
+        <td>{{ product_labels.get(p.product_type, p.product_type.value) }}</td>
+        <td>{{ p.amount_rub }} ₽</td>
+        <td><span class="badge {{ status_badge.get(p.status, '') }}">{{ status_labels.get(p.status, p.status.value) }}</span></td>
+        <td class="muted">{{ p.created_at.strftime('%d.%m.%Y %H:%M') if p.created_at else '—' }}</td>
+        <td>
+          {% if p.status.value == 'pending' %}
+          <form class="inline" method="post" action="/purchases/{{ p.id }}/confirm">
+            <button type="submit" class="btn btn-primary btn-sm">Подтвердить</button>
+          </form>
+          <form class="inline" method="post" action="/purchases/{{ p.id }}/reject">
+            <button type="submit" class="btn btn-danger btn-sm">Отклонить</button>
+          </form>
+          {% endif %}
+          {% if p.user %}
+          <a href="/users/{{ p.user.id }}/chat" class="btn btn-sm" style="background:var(--surface2);color:var(--text);">Чат</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="muted" style="text-align:center;padding:32px;">Заявок нет</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
